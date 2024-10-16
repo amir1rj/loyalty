@@ -68,11 +68,7 @@ class UserPointAdmin(admin.ModelAdmin):
 
 @admin.register(Tier)
 class TierAdmin(admin.ModelAdmin):
-<<<<<<< HEAD
-    list_display = ('id', 'name')
-=======
     list_display = ('id', 'name', 'min_points')
->>>>>>> amir_master
     search_fields = ('name',)
     inlines = [RewardInline]
-
+    autocomplete_fields = ['reward']
