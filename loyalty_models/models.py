@@ -14,17 +14,17 @@ class ActivePointRoleManager(models.Manager):
 
 
 class PointRole(models.Model):
-    min_class_count = models.PositiveIntegerField(null=True, blank=True)
+    number = models.PositiveIntegerField(null=True, blank=True)
     # classroom = models.ForeignKey('Classroom', on_delete=models.CASCADE,null=True, blank=True)
     # category = models.ForeignKey('Category', on_delete=models.CASCADE,null=True, blank=True)
     # department = models.ForeignKey('Department', on_delete=models.CASCADE,null=True, blank=True)
     # work_group = models.ForeignKey('WorkGroup', on_delete=models.CASCADE,null=True, blank=True)
     from_date = models.DateField(null=True, blank=True)
     to_date = models.DateField(null=True, blank=True)
-    group = models.ForeignKey('PointRoleGroup', on_delete=models.CASCADE, related_name="poit_roles", null=True,
+    group = models.ForeignKey('PointRoleGroup', on_delete=models.CASCADE, related_name="point_roles", null=True,
                               blank=True)
     point_role_type = models.CharField(max_length=255, choices=constants.point_role_type)
-    reward = models.ManyToManyField('Rewards', blank=True, related_name='point_roles')
+    reward = models.ManyToManyField('Reward', blank=True, related_name='point_roles')
     priority = models.PositiveIntegerField(null=True, blank=True)
     user = models.ManyToManyField(User, related_name="point_roles", blank=True)
     is_active = models.BooleanField(default=True)
@@ -61,9 +61,9 @@ class PointRole(models.Model):
                         'max_priority']
                 self.priority = (max_priority or 0) + 1
                 # Custom validation for min_class_count based on point_role_type
-        if self.point_role_type == 'number_of_purchases' and self.min_class_count is None:
+        if self.point_role_type == 'number_of_purchases' and self.number is None:
             raise ValidationError(
-                {'min_class_count': 'This field is required when point_role_type is "number_of_purchases".'})
+                {'number': 'This field is required when point_role_type is "number_of_purchases".'})
 
     def save(self, *args, **kwargs):
         self.clean()  # Call the clean method to ensure priorities are handled
@@ -75,7 +75,7 @@ class PointRole(models.Model):
     def make_role_none_reusable(self, user: User):
         self.user_logs.add(user)
         # add point_roles to all active points for preventing to being used twice
-        all_point_role_in_group = self.group.poit_roles.all()
+        all_point_role_in_group = self.group.point_roles.all()
 
         for role in all_point_role_in_group:
             role.user.add(user)
@@ -98,18 +98,54 @@ class PointRole(models.Model):
     def perform_point_role(self, user: User = None) -> dict:
         if self.point_role_type == "number_of_purchases":
             return self.check_number_of_purchases(user)
+        if self.point_role_type == "num_of_first_in_class":
+            return self.check_number_if_first_in_class(user)
+        if self.point_role_type == "avg_score":
+            return self.check_avg_score(user)
 
     # todo should add course and category and ... for optional parameters for specifying other role
     def check_number_of_purchases(self, user: User) -> dict:
         # todo : should replace with actual number of purchases in specific time period
         number_of_purchases = 5
-        is_valid = self.is_valid(user)
-        if is_valid.get('success'):
-            if number_of_purchases >= self.min_class_count:
-                self.make_role_none_reusable(user)
-                return {"success": True, "message": "point role performed"}
+        # Use compare_with_value function for comparison
+        return self.compare_with_value(number_of_purchases, 'gte', user)
 
-            return {'success': False, "message": "did not passed the point role"}
+    # todo should add course and category and ... for optional parameters for specifying other role
+    def check_number_if_first_in_class(self, user: User) -> dict:
+        # TODO: Replace with actual number of first in class in a specific time period
+        number_of_first_in_class = 5
+
+        # Use compare_with_value function for comparison
+        return self.compare_with_value(number_of_first_in_class, 'gte', user)
+
+    # todo should add course and category and ... for optional parameters for specifying other role
+    def check_avg_score(self, user: User) -> dict:
+        # TODO: Replace with actual average score in a specific time period
+        avg_score = 78
+
+        # Use compare_with_value function for comparison
+        return self.compare_with_value(avg_score, 'gte', user)
+
+    def compare_with_value(self, value, compare_type, user: User) -> dict:
+        is_valid = self.is_valid(user)
+
+        if is_valid.get('success'):
+            # Handle comparison based on the provided compare_type
+            if compare_type == 'gte':  # Greater than or equal to
+                if value >= self.number:
+                    self.make_role_none_reusable(user)
+                    return {"success": True, "message": "point role performed"}
+                return {'success': False, "message": "did not pass the point role"}
+
+            elif compare_type == 'lte':  # Less than or equal to
+                if value <= self.number:
+                    self.make_role_none_reusable(user)
+                    return {"success": True, "message": "point role performed"}
+                return {'success': False, "message": "did not pass the point role"}
+
+            # Add a fallback for invalid compare_type values
+            return {"success": False, "message": "Invalid comparison type"}
+
         return {"success": False, "message": is_valid.get('message')}
 
 
@@ -122,7 +158,7 @@ class PointRoleGroup(models.Model):
         return self.name
 
 
-class Rewards(models.Model):
+class Reward(models.Model):
     name = models.CharField(max_length=255)
     description = models.TextField(null=True, blank=True)
     value = models.IntegerField(null=True, blank=True)
@@ -168,22 +204,23 @@ class AdditionalService(models.Model):
         return {'success': True, "message": f"User {user.username} added"}
 
 
-class UserPoints(models.Model):
+class UserPoint(models.Model):
     user = models.OneToOneField(User, related_name="points", on_delete=models.CASCADE)
     point = models.IntegerField(default=0)
-    tier = models.ForeignKey('Tiers', related_name='points', blank=True, null=True, on_delete=models.CASCADE)
+    tier = models.ForeignKey('Tier', related_name='points', blank=True, null=True, on_delete=models.CASCADE)
 
     def __str__(self):
         return f'{self.user.username}-{self.point} points'
 
     def add_point(self, value: int):
         self.point += value
+        self.save()
         # check tier
         self.assign_tier()
 
     def assign_tier(self):
         # Find the highest tier the user qualifies for based on their points
-        qualifying_tiers = Tiers.objects.filter(min_points__lte=self.point).order_by('-min_points')
+        qualifying_tiers = Tier.objects.filter(min_points__lte=self.point).order_by('-min_points')
         if qualifying_tiers.exists():
             # Assign the highest qualifying tier
             new_tier = qualifying_tiers.first()
@@ -192,10 +229,10 @@ class UserPoints(models.Model):
                 self.save()
 
 
-class Tiers(models.Model):
+class Tier(models.Model):
     name = models.CharField(max_length=255)
     min_points = models.PositiveIntegerField()
-    reward = models.ManyToManyField(Rewards, related_name="tiers")
+    reward = models.ManyToManyField(Reward, related_name="tiers")
 
     def __str__(self):
         return self.name
@@ -204,14 +241,14 @@ class Tiers(models.Model):
 class UserPointsService:
     def __init__(self, user):
         self.user = user
-        self.user_points, created = UserPoints.objects.get_or_create(user=user)
+        self.user_points, created = UserPoint.objects.get_or_create(user=user)
 
     @staticmethod
     def get_all_groups():
         # Fetch all PointRoleGroup instances that have at least one active PointRole
         active_groups_with_roles = PointRoleGroup.objects.prefetch_related(
             Prefetch(
-                'poit_roles',
+                'point_roles',
                 queryset=PointRole.objects.filter(is_active=True).order_by('priority'),
                 to_attr='active_roles'  # Store the prefetched PointRoles in this attribute
             )
@@ -224,7 +261,6 @@ class UserPointsService:
             for role in role_group.active_roles:
                 # do action based on type
                 is_valid = role.perform_point_role(self.user)
-                print(is_valid)
                 if is_valid.get('success'):
                     # break if one condition in group succeeded
                     rewards = role.reward.all()
