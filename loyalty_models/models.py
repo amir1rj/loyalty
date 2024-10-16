@@ -1,5 +1,5 @@
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
 from django.contrib.auth.models import User
 from django.db.models import Prefetch
 from django.utils import timezone
@@ -73,12 +73,13 @@ class PointRole(models.Model):
         return f"{self.point_role_type}- {self.group} -{self.pk}"
 
     def make_role_none_reusable(self, user: User):
+        # add user logs to store point roles that user actually used
         self.user_logs.add(user)
         # add point_roles to all active points for preventing to being used twice
         all_point_role_in_group = self.group.point_roles.all()
-
-        for role in all_point_role_in_group:
-            role.user.add(user)
+        with transaction.atomic():
+            for role in all_point_role_in_group:
+                role.user.add(user)
         return {'success': True, 'message': 'role is active'}
 
     def is_valid(self, user: User, *args, **kwargs) -> dict:
@@ -92,8 +93,6 @@ class PointRole(models.Model):
         if self.user.filter(id=user.id).exists():
             return {"success": False, "message": "This user already has this point role."}
         return {"success": True, "message": "role is valid"}
-
-    # add user logs to store point roles that user actually used
 
     def perform_point_role(self, user: User = None) -> dict:
         if self.point_role_type == "number_of_purchases":
@@ -261,6 +260,7 @@ class UserPointsService:
             for role in role_group.active_roles:
                 # do action based on type
                 is_valid = role.perform_point_role(self.user)
+                print(is_valid)
                 if is_valid.get('success'):
                     # break if one condition in group succeeded
                     rewards = role.reward.all()
