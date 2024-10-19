@@ -1,0 +1,30 @@
+<!-- point_role_groups.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Point Role Groups</title>
+</head>
+<body>
+<h1>Point Role Groups</h1>
+<form method="post">
+    {% csrf_token %}
+    {% for group in groups %}
+        <h2>{{ group.name }}</h2>
+        <div>
+            {% for role, form in role_forms %}
+                {% if role.group == group %}
+                    <fieldset>
+                        <legend>Editing Role: {{ role.number }}</legend>
+                        <p>ID: {{ form.id.value }}</p>  <!-- Display ID as read-only text -->
+                        {{ form.as_p|safe }}
+                    </fieldset>
+                {% endif %}
+            {% endfor %}
+        </div>
+    {% endfor %}
+    <button type="submit">Save Changes</button>
+</form>
+</body>
+</html>
