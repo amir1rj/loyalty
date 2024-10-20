@@ -7,18 +7,25 @@ from django.utils import timezone
 from . import constants
 
 
+class BaseLoyaltyProgramModel(models.Model):
+    # classroom = models.ForeignKey('Classroom', on_delete=models.CASCADE,null=True, blank=True)
+    # category = models.ForeignKey('Category', on_delete=models.CASCADE,null=True, blank=True)
+    # department = models.ForeignKey('Department', on_delete=models.CASCADE,null=True, blank=True)
+    # work_group = models.ForeignKey('WorkGroup', on_delete=models.CASCADE,null=True, blank=True)
+    # test_field = models.CharField(max_length=255, blank=True, null=True)
+
+    class Meta:
+        abstract = True
+
+
 class ActivePointRoleManager(models.Manager):
     def get_queryset(self):
         """Override the queryset to return only active point roles."""
         return super().get_queryset().filter(is_active=True)
 
 
-class PointRole(models.Model):
+class PointRole(BaseLoyaltyProgramModel):
     number = models.PositiveIntegerField(null=True, blank=True)
-    # classroom = models.ForeignKey('Classroom', on_delete=models.CASCADE,null=True, blank=True)
-    # category = models.ForeignKey('Category', on_delete=models.CASCADE,null=True, blank=True)
-    # department = models.ForeignKey('Department', on_delete=models.CASCADE,null=True, blank=True)
-    # work_group = models.ForeignKey('WorkGroup', on_delete=models.CASCADE,null=True, blank=True)
     from_date = models.DateField(null=True, blank=True)
     to_date = models.DateField(null=True, blank=True)
     group = models.ForeignKey('PointRoleGroup', on_delete=models.CASCADE, related_name="point_roles", null=True,
@@ -37,36 +44,52 @@ class PointRole(models.Model):
         constraints = [
             models.UniqueConstraint(fields=['group', 'priority'], name='unique_priority_per_group')
         ]
+        ordering = ['priority']
 
     # todo: should add validation based on point role types
     def clean(self):
-        """Adjust priority if there's a conflict within the same group"""
-        if self.group and self.priority:
-            # Get all PointRoles in the same group, excluding the current one
-            point_roles = PointRole.objects.filter(group=self.group).exclude(pk=self.pk).order_by('priority')
-            priorities = [role.priority for role in point_roles]
-
-            # If the priority already exists, shift priorities
-            if self.priority in priorities:
-                conflicting_role = PointRole.objects.get(group=self.group, priority=self.priority)
-                # Adjust the conflicting role's priority to be the next available
-                max_priority = max(priorities) if priorities else 0
-                conflicting_role.priority = max_priority + 1
-                conflicting_role.save()
-            # Automatically assign priority if it's not provided
-            if self.group and not self.priority:
-                # Get the highest priority in the group and assign the next value
-                max_priority = \
-                    PointRole.objects.filter(group=self.group).aggregate(max_priority=models.Max('priority'))[
-                        'max_priority']
-                self.priority = (max_priority or 0) + 1
-                # Custom validation for min_class_count based on point_role_type
-        if self.point_role_type == 'number_of_purchases' and self.number is None:
-            raise ValidationError(
-                {'number': 'This field is required when point_role_type is "number_of_purchases".'})
+        """Perform validation for point role type."""
+        # Custom validation for min_class_count based on point_role_type
+        if self.point_role_type in ['number_of_purchases', 'avg_score'] and self.number is None:
+            raise ValidationError({'number': f'This field is required when point_role_type is {self.point_role_type}.'})
 
     def save(self, *args, **kwargs):
-        self.clean()  # Call the clean method to ensure priorities are handled
+        """Assign priority correctly before saving."""
+        if self.group:
+            # Get all the taken priorities in the group, excluding the current instance if updating
+            taken_priorities = (
+                PointRole.objects.filter(group=self.group).exclude(pk=self.pk).values_list('priority', flat=True)
+            )
+            # Sort the priorities to find the first available spot
+            taken_priorities = sorted(taken_priorities)
+
+            # Find the first missing priority starting from 1
+            available_priority = 1
+            for prio in taken_priorities:
+                if prio == available_priority:
+                    available_priority += 1
+                else:
+                    break
+
+            # Set the priority to the first available one if there's a conflict or if it's not set
+            if not self.priority or self.priority in taken_priorities:
+                self.priority = available_priority
+
+            # Automatically assign priority if not provided
+            if not self.priority:
+                # Find the lowest available priority in the group
+                taken_priorities = PointRole.objects.filter(group=self.group).values_list('priority', flat=True)
+                # Sort and find the first missing priority
+                available_priority = 1
+                for prio in sorted(taken_priorities):
+                    if prio == available_priority:
+                        available_priority += 1
+                    else:
+                        break
+                # Assign the lowest available priority
+                self.priority = available_priority
+
+        # Now call the original save method
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -147,6 +170,10 @@ class PointRole(models.Model):
 
         return {"success": False, "message": is_valid.get('message')}
 
+    @property
+    def user_point_role_usage_frequency(self):
+        return self.user_logs.count()
+
 
 class PointRoleGroup(models.Model):
     name = models.CharField(max_length=255)
@@ -157,14 +184,10 @@ class PointRoleGroup(models.Model):
         return self.name
 
 
-class Reward(models.Model):
+class Reward(BaseLoyaltyProgramModel):
     name = models.CharField(max_length=255)
     description = models.TextField(null=True, blank=True)
     value = models.IntegerField(null=True, blank=True)
-    # classroom = models.ManyToManyField('Classroom', on_delete=models.CASCADE, blank=True)
-    # department = models.ForeignKey('Department', on_delete=models.CASCADE, null=True, blank=True)
-    # category = models.ForeignKey('Category', on_delete=models.CASCADE, null=True, blank=True)
-    # work_group = models.ForeignKey('WorkGroup', on_delete=models.CASCADE,null=True, blank=True)
     point = models.IntegerField(null=True, blank=True)
     discount_limit = models.IntegerField(null=True, blank=True)
     additional_service = models.ForeignKey('AdditionalService', on_delete=models.CASCADE, null=True, blank=True)
@@ -187,7 +210,7 @@ class Reward(models.Model):
         return self.additional_service.add_user_to_additional_services(user)
 
 
-class AdditionalService(models.Model):
+class AdditionalService(BaseLoyaltyProgramModel):
     name = models.CharField(max_length=255)
     description = models.TextField(null=True, blank=True)
     user = models.ManyToManyField(User, related_name="AdditionalServices", blank=True)
@@ -248,10 +271,11 @@ class UserPointsService:
         active_groups_with_roles = PointRoleGroup.objects.prefetch_related(
             Prefetch(
                 'point_roles',
-                queryset=PointRole.objects.filter(is_active=True).order_by('priority'),
+                queryset=PointRole.active_objects.prefetch_related('reward').order_by('priority'),
                 to_attr='active_roles'  # Store the prefetched PointRoles in this attribute
             )
         )
+
         return active_groups_with_roles
 
     def perform_point_roles(self):
@@ -260,10 +284,9 @@ class UserPointsService:
             for role in role_group.active_roles:
                 # do action based on type
                 is_valid = role.perform_point_role(self.user)
-                print(is_valid)
+
                 if is_valid.get('success'):
                     # break if one condition in group succeeded
-                    rewards = role.reward.all()
-                    for reward in rewards:
+                    for reward in role.reward.all():
                         reward.apply_rewards(self.user)
                     break

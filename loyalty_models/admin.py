@@ -1,13 +1,13 @@
 from django.contrib import admin
 from .models import (
     PointRole, PointRoleGroup, Reward, AdditionalService,
-    UserPoint, Tier, UserPointsService
+    UserPoint, Tier
 )
 
 
 class PointRoleInline(admin.TabularInline):
     model = PointRole
-    extra = 0  # Removes empty extra forms
+    extra = 0
 
 
 class RewardInline(admin.TabularInline):
@@ -17,12 +17,14 @@ class RewardInline(admin.TabularInline):
 
 @admin.register(PointRole)
 class PointRoleAdmin(admin.ModelAdmin):
-    list_display = ('id', 'point_role_type', 'group', 'priority', 'is_active', 'from_date', 'to_date')
+    list_display = ('id', 'point_role_type', 'group', "number", 'priority', 'is_active', 'from_date', 'to_date')
+    list_editable = ('priority', 'group', 'number')
     list_filter = ('point_role_type', 'group', 'is_active')
     search_fields = ('point_role_type', 'group__name')
     autocomplete_fields = ('user', 'group', 'reward', 'user_logs')
     filter_horizontal = ('user', 'reward', 'user_logs')
     actions = ['deactivate_selected', 'activate_selected']
+    readonly_fields = ('user_point_role_usage_frequency',)
 
     def deactivate_selected(self, request, queryset):
         queryset.update(is_active=False)
@@ -32,6 +34,10 @@ class PointRoleAdmin(admin.ModelAdmin):
     def activate_selected(self, request, queryset):
         queryset.update(is_active=True)
 
+    def user_point_role_usage_frequency(self, obj):
+        return obj.user_point_role_usage_frequency
+
+    user_point_role_usage_frequency.short_description = 'Number of Committed Point Role'
     activate_selected.short_description = "Activate selected roles"
 
 
@@ -71,4 +77,3 @@ class TierAdmin(admin.ModelAdmin):
     list_display = ('id', 'name', 'min_points')
     search_fields = ('name',)
     inlines = [RewardInline]
-    autocomplete_fields = ['reward']
