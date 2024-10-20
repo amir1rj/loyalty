@@ -44,37 +44,52 @@ class PointRole(BaseLoyaltyProgramModel):
         constraints = [
             models.UniqueConstraint(fields=['group', 'priority'], name='unique_priority_per_group')
         ]
+        ordering = ['priority']
 
     # todo: should add validation based on point role types
     def clean(self):
-        """Adjust priority if there's a conflict within the same group."""
+        """Perform validation for point role type."""
+        # Custom validation for min_class_count based on point_role_type
+        if self.point_role_type in ['number_of_purchases', 'avg_score'] and self.number is None:
+            raise ValidationError({'number': f'This field is required when point_role_type is {self.point_role_type}.'})
+
+    def save(self, *args, **kwargs):
+        """Assign priority correctly before saving."""
         if self.group:
-            # Check if the priority already exists in the group (excluding the current instance)
-            if self.priority:
-                conflicting_role = PointRole.objects.filter(group=self.group, priority=self.priority).exclude(
-                    pk=self.pk).first()
-                if conflicting_role:
-                    # Adjust the conflicting role's priority to be the next available
-                    max_priority = PointRole.objects.filter(group=self.group).aggregate(
-                        max_priority=models.Max('priority')
-                    )['max_priority'] or 0
-                    conflicting_role.priority = max_priority + 1
-                    conflicting_role.save()
+            # Get all the taken priorities in the group, excluding the current instance if updating
+            taken_priorities = (
+                PointRole.objects.filter(group=self.group).exclude(pk=self.pk).values_list('priority', flat=True)
+            )
+            # Sort the priorities to find the first available spot
+            taken_priorities = sorted(taken_priorities)
+
+            # Find the first missing priority starting from 1
+            available_priority = 1
+            for prio in taken_priorities:
+                if prio == available_priority:
+                    available_priority += 1
+                else:
+                    break
+
+            # Set the priority to the first available one if there's a conflict or if it's not set
+            if not self.priority or self.priority in taken_priorities:
+                self.priority = available_priority
 
             # Automatically assign priority if not provided
             if not self.priority:
-                # Get the next available priority in the group
-                max_priority = PointRole.objects.filter(group=self.group).aggregate(
-                    max_priority=models.Max('priority')
-                )['max_priority'] or 0
-                self.priority = max_priority + 1
+                # Find the lowest available priority in the group
+                taken_priorities = PointRole.objects.filter(group=self.group).values_list('priority', flat=True)
+                # Sort and find the first missing priority
+                available_priority = 1
+                for prio in sorted(taken_priorities):
+                    if prio == available_priority:
+                        available_priority += 1
+                    else:
+                        break
+                # Assign the lowest available priority
+                self.priority = available_priority
 
-        # Custom validation for min_class_count based on point_role_type
-        if self.point_role_type in ['number_of_purchases', 'avg_score'] and self.number is None:
-            raise ValidationError({'number': 'This field is required when point_role_type is "number_of_purchases".'})
-
-    def save(self, *args, **kwargs):
-        self.clean()  # Call the clean method to ensure priorities are handled
+        # Now call the original save method
         super().save(*args, **kwargs)
 
     def __str__(self):
