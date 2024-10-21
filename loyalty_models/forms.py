@@ -3,7 +3,6 @@ from django.core.exceptions import ValidationError
 
 from .models import PointRole, PointRoleGroup, Reward
 
-
 class PointRoleForm(forms.ModelForm):
     id = forms.IntegerField(widget=forms.HiddenInput(), required=False)
 

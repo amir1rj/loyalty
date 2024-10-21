@@ -56,24 +56,18 @@ class PointRole(BaseLoyaltyProgramModel):
     def save(self, *args, **kwargs):
         """Assign priority correctly before saving."""
         if self.group:
-            # Get all the taken priorities in the group, excluding the current instance if updating
-            taken_priorities = (
-                PointRole.objects.filter(group=self.group).exclude(pk=self.pk).values_list('priority', flat=True)
-            )
-            # Sort the priorities to find the first available spot
-            taken_priorities = sorted(taken_priorities)
+            # Get the instance in the group with the same priority
+            conflicting_instance = PointRole.objects.filter(
+                group=self.group, priority=self.priority
+            ).exclude(pk=self.pk).first()
 
-            # Find the first missing priority starting from 1
-            available_priority = 1
-            for prio in taken_priorities:
-                if prio == available_priority:
+            if conflicting_instance:
+                # If there's a conflict, find the next available priority and reassign the conflicting instance
+                available_priority = 1
+                while PointRole.objects.filter(group=self.group, priority=available_priority).exists():
                     available_priority += 1
-                else:
-                    break
-
-            # Set the priority to the first available one if there's a conflict or if it's not set
-            if not self.priority or self.priority in taken_priorities:
-                self.priority = available_priority
+                conflicting_instance.priority = available_priority
+                conflicting_instance.save()
 
             # Automatically assign priority if not provided
             if not self.priority:

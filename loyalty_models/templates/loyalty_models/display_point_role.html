@@ -5,23 +5,24 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Point Role Groups</title>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.14.0/Sortable.min.js"></script>
 </head>
 <body>
 <h1>Point Role Groups</h1>
-<form method="post">
+<form method="post" id="point-role-form">
     {% csrf_token %}
     {% for group in groups %}
         <h2>{{ group.name }}</h2>
-        <div>
+        <div id="group-{{ group.id }}" class="group-container">
             {% for role, form in role_forms %}
                 {% if role.group == group %}
-                    <fieldset>
+                    <fieldset class="role-item" data-role-id="{{ role.id }}">
                         <legend>Editing Role: {{ role }}</legend>
                         <p>ID: {{ form.id.value }}</p>
 
-                        <!-- Render all fields except the reward field -->
+
                         {% for field in form %}
-                            {% if field.name != 'reward' %}
+                            {% if field.name != 'reward' and field.name != 'priority' %}
                                 {{ field.label_tag }}{{ field }}
                                 {% if field.errors %}
                                     <div class="error">{{ field.errors }}</div>
@@ -29,7 +30,10 @@
                             {% endif %}
                         {% endfor %}
 
-                        <!-- Render reward field manually -->
+
+                        <input type="hidden" name="group_{{ role.id }}" value="{{ role.group.id }}" class="group-field">
+
+
                         <label for="reward_{{ role.id }}">Rewards:</label>
                         <select name="reward_{{ role.id }}" id="reward_{{ role.id }}" multiple>
                             {% for reward in form.fields.reward.queryset %}
@@ -39,11 +43,13 @@
                             {% endfor %}
                         </select>
 
+                        <input type="hidden" name="priority_{{ role.id }}" value="{{ role.priority }}"
+                               class="priority-field">
                         <button type="submit"
                                 onclick="return confirm('Are you sure you want to delete this point role?');"><a
                                 href="{% url 'delete_point_role' role.id %}">delete </a>
-                        </button>
 
+                        </button>
                     </fieldset>
                 {% endif %}
             {% endfor %}
@@ -52,5 +58,36 @@
     <button type="submit">Save Changes</button>
 </form>
 
+<script>
+
+
+    document.addEventListener('DOMContentLoaded', function () {
+        // Loop through each group container
+        document.querySelectorAll('.group-container').forEach(function (groupContainer) {
+            // Initialize SortableJS for each group container
+            new Sortable(groupContainer, {
+                group: 'point-roles', // Enable dragging between groups
+                handle: '.role-item', // The element that should be draggable
+                onEnd: function (evt) {
+                    const draggedItem = evt.item; // The dragged element
+                    const newGroupContainer = evt.to; // The new group container
+                    const newGroupId = newGroupContainer.id.split('-')[1]; // Extract the new group ID
+
+                    // Update the hidden group field in the form
+                    const groupField = draggedItem.querySelector('.group-field');
+                    groupField.value = newGroupId;
+
+                    // Update the priority fields based on their new order
+                    const groupRoles = newGroupContainer.querySelectorAll('.role-item');
+                    groupRoles.forEach(function (roleItem, index) {
+                        const priorityField = roleItem.querySelector('.priority-field');
+                        // Set the new priority (index + 1 because priorities start from 1)
+                        priorityField.value = index + 1;
+                    });
+                }
+            });
+        });
+    });
+</script>
 </body>
 </html>

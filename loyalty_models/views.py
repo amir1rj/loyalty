@@ -1,3 +1,5 @@
+from tokenize import group
+
 from django.contrib import messages
 
 from django.contrib.auth.models import User
@@ -55,8 +57,7 @@ class DisplayPointRolesView(View):
         has_errors = False
 
         # Extract IDs to process the corresponding forms
-        ids = request.POST.getlist('id')  # Get list of IDs from the POST data
-
+        ids = request.POST.getlist('id')
         # Loop through each role ID
         for role_id in ids:
             # Fetch the corresponding PointRole instance
@@ -69,7 +70,6 @@ class DisplayPointRolesView(View):
                 'from_date': request.POST.getlist('from_date')[ids.index(role_id)],
                 'to_date': request.POST.getlist('to_date')[ids.index(role_id)],
                 'point_role_type': request.POST.getlist('point_role_type')[ids.index(role_id)],
-                'priority': request.POST.getlist('priority')[ids.index(role_id)],
                 'is_active': request.POST.getlist('is_active')[ids.index(role_id)] == 'on',
             }
 
@@ -77,7 +77,11 @@ class DisplayPointRolesView(View):
             form = PointRoleForm(form_data, instance=role)
 
             if form.is_valid():
+                priority = request.POST.get(f'priority_{role_id}')
+                group_id = request.POST.get(f'group_{role_id}')
 
+                role.group_id = int(group_id)
+                role.priority = int(priority)
                 form.save()
 
                 # Handle the many-to-many reward relationship
@@ -86,9 +90,10 @@ class DisplayPointRolesView(View):
                     role.reward.set(reward_ids)
                 else:
                     role.reward.clear()
+
             else:
-                has_errors = True  # Set the flag to true if any form is invalid
-            forms.append((role, form))  # Append the role and form pair for rendering
+                has_errors = True
+            forms.append((role, form))
 
         if has_errors:
             # Fetch the groups again and pass the modified role_forms structure

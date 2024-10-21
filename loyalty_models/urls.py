@@ -9,6 +9,6 @@ urlpatterns = [
     path('/create_point_role', CreatePintRoleView.as_view(), name='create_point_role'),
     path('/create_point_role_group', CreateGroupView.as_view(), name='create_point_role_group'),
     path('/create_reward', CreateRewardView.as_view(), name='create_reward'),
-    path('point-role/delete/<int:pk>/', DeletePointRoleView.as_view(), name='delete_point_role'),
+    path('/point-role/delete/<int:pk>/', DeletePointRoleView.as_view(), name='delete_point_role'),
 
 ]
