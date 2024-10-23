@@ -22,15 +22,20 @@
 
 
                         {% for field in form %}
-                            {% if field.name != 'reward' and field.name != 'priority' %}
+                            {% if field.name != 'reward' and field.name != 'priority' and field.name != 'is_active' %}
                                 {{ field.label_tag }}{{ field }}
                                 {% if field.errors %}
                                     <div class="error">{{ field.errors }}</div>
                                 {% endif %}
                             {% endif %}
+
                         {% endfor %}
 
-
+                        <label for="is_active_{{ role.id }}">active</label>
+                        <input type="checkbox" name="is_active_{{ role.id }}" id="is_active_{{ role.id }}"
+                                {% if role.is_active %}
+                               checked   {% endif %}
+                        >
                         <input type="hidden" name="group_{{ role.id }}" value="{{ role.group.id }}" class="group-field">
 
 

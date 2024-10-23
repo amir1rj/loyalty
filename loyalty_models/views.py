@@ -70,18 +70,19 @@ class DisplayPointRolesView(View):
                 'from_date': request.POST.getlist('from_date')[ids.index(role_id)],
                 'to_date': request.POST.getlist('to_date')[ids.index(role_id)],
                 'point_role_type': request.POST.getlist('point_role_type')[ids.index(role_id)],
-                'is_active': request.POST.getlist('is_active')[ids.index(role_id)] == 'on',
+                'is_active': request.POST.get(f'is_active_{role_id}') == 'on',
+                'priority': int(request.POST.get(f'priority_{role_id}')),
+
             }
 
             # Create a form instance with the prepared data
             form = PointRoleForm(form_data, instance=role)
 
             if form.is_valid():
-                priority = request.POST.get(f'priority_{role_id}')
                 group_id = request.POST.get(f'group_{role_id}')
 
                 role.group_id = int(group_id)
-                role.priority = int(priority)
+
                 form.save()
 
                 # Handle the many-to-many reward relationship

@@ -3,6 +3,7 @@ from django.db import models, transaction
 from django.contrib.auth.models import User
 from django.db.models import Prefetch
 from django.utils import timezone
+from simple_history.models import HistoricalRecords
 
 from . import constants
 
@@ -39,7 +40,7 @@ class PointRole(BaseLoyaltyProgramModel):
     objects = models.Manager()  # Default manager
     active_objects = ActivePointRoleManager()  # Custom manager for active PointRoles
     user_logs = models.ManyToManyField(User, related_name="used_point_roles", blank=True)
-
+    history = HistoricalRecords()
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=['group', 'priority'], name='unique_priority_per_group')
@@ -171,8 +172,6 @@ class PointRole(BaseLoyaltyProgramModel):
 
 class PointRoleGroup(models.Model):
     name = models.CharField(max_length=255)
-
-    # user = models.ManyToManyField(User, related_name="point_role_groups", blank=True)
 
     def __str__(self):
         return self.name
